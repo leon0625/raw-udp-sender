@@ -13,6 +13,7 @@
 #include <string.h>
 #include <netinet/udp.h>
 #include <arpa/inet.h>
+#include <net/if.h>
 #include <netdb.h>
 
 /* 
@@ -59,7 +60,19 @@ unsigned short checkSum(unsigned short *ptr, int nbytes) {
     return answer;
 }
 
-void udpPacketSend(struct sockaddr_in *srcHost, struct sockaddr_in *dstHost, char *udpData, int udpDataLen) {
+void bindInterface(int sock, char *ifname) {
+    struct ifreq ifr;
+
+    memset(&ifr, 0, sizeof(ifr));
+    snprintf(ifr.ifr_name, sizeof(ifr.ifr_name), ifname);
+    if (setsockopt(sock, SOL_SOCKET, SO_BINDTODEVICE, (void *)&ifr, sizeof(ifr)) < 0) {
+        perror("BIND INTERFACE ERROR");
+        exit(1);
+    }
+}
+
+
+void udpPacketSend(struct sockaddr_in *srcHost, struct sockaddr_in *dstHost, char *udpData, int udpDataLen, char *ifname) {
     int st;
     int ipLen;
     int pseLen;
@@ -84,6 +97,8 @@ void udpPacketSend(struct sockaddr_in *srcHost, struct sockaddr_in *dstHost, cha
         perror("HDRINCL ERROR");
         exit(1);
     }
+
+    bindInterface(st, ifname);
 
     ipLen = sizeof(struct ip) + sizeof(struct udphdr) + udpDataLen;
 
@@ -127,7 +142,7 @@ void udpPacketSend(struct sockaddr_in *srcHost, struct sockaddr_in *dstHost, cha
     free(pse);
 }
 
-int raw_udp_send(char *src_addr, char *src_port, char *dst_addr, char *dst_port) {
+int raw_udp_send(char *src_addr, char *src_port, char *dst_addr, char *dst_port, char *ifname) {
     struct sockaddr_in srcHost, dstHost;
     struct hostent *host, *host2;
 
@@ -167,15 +182,15 @@ int raw_udp_send(char *src_addr, char *src_port, char *dst_addr, char *dst_port)
         }
         srcHost.sin_addr = *(struct in_addr*)(host2->h_addr_list[0]);
     }
-    udpPacketSend(&srcHost, &dstHost, Data, count);
+    udpPacketSend(&srcHost, &dstHost, Data, count, ifname);
     return 0;
 }
 
 int main(int argc, char **argv) {
     if (argc < 5) {
-        printf("usage: ./raw_udp src_addr src_port dst_addr dst_port\n");
+        printf("usage: ./raw_udp src_addr src_port dst_addr dst_port interface\n");
         exit(1);
     }
 
-    raw_udp_send(argv[1], argv[2], argv[3], argv[4]);
+    raw_udp_send(argv[1], argv[2], argv[3], argv[4], argv[5]);
 }
